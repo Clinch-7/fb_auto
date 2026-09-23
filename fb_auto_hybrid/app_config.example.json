@@ -1,0 +1,41 @@
+{
+  "roxy": {
+    "api_host": "http://127.0.0.1:50000",
+    "api_key": "",
+    "workspace_id": null
+  },
+  "vest": {
+    "ops_login_url": "https://ga-client.ops-center.net/api/user/login/",
+    "vest_login_url": "https://api-vest.tgcgame.com/admin/login_by_token/",
+    "vest_api_base": "https://api-vest.tgcgame2026.com",
+    "organization": "Quest",
+    "ops_username": "",
+    "ops_password": "",
+    "ops_totp_secret": ""
+  },
+  "lark": {
+    "openapi_base": "https://open.larksuite.com",
+    "app_id": "",
+    "app_secret": "",
+    "bot_name": ""
+  },
+  "monitor_sheet": {
+    "openapi_base": "",
+    "app_id": "",
+    "app_secret": "",
+    "spreadsheet_token": "",
+    "sheet_id": ""
+  },
+  "adjust": {
+    "api_token": "",
+    "api_base": "https://api.adjust.com/dashboard/api",
+    "automation_api_base": "https://automate.adjust.com/app-automation",
+    "enabled": true,
+    "facebook_event_mappings": {
+      "Register": "fb_mobile_complete_registration",
+      "Small": "fb_mobile_purchase",
+      "Medium": "fb_mobile_purchase",
+      "Large": "fb_mobile_purchase"
+    }
+  }
+}

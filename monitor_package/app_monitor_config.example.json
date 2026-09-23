@@ -1,0 +1,29 @@
+{
+  "lark": {
+    "openapi_base": "https://open.larksuite.com",
+    "app_id": "",
+    "app_secret": "",
+    "webhook_url": "",
+    "at_members": []
+  },
+  "sheet": {
+    "spreadsheet_token": "",
+    "sheet_id": "",
+    "read_range": "A2:C1000",
+    "update_range_template": "D{row}:G{row}"
+  },
+  "facebook": {
+    "graph_version": "v25.0"
+  },
+  "runtime": {
+    "check_interval_minutes": 30,
+    "max_workers": 3,
+    "request_timeout_seconds": [
+      5,
+      20
+    ],
+    "confirm_fail_times": 1,
+    "confirm_recovery_times": 1,
+    "force_alert_on_start": false
+  }
+}
