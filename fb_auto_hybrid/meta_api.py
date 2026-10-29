@@ -820,7 +820,6 @@ class MetaApi:
         patterns = [
             r'"app_secret"\s*:\s*"([a-fA-F0-9]{32})"',
             r'"app_secret_value"\s*:\s*"([a-fA-F0-9]{32})"',
-            r'\b([a-fA-F0-9]{32})\b',
         ]
         for pattern in patterns:
             match = re.search(pattern, decoded)
@@ -828,25 +827,49 @@ class MetaApi:
                 return match.group(1)
         return ""
 
-    def extract_app_secret_from_page(self) -> str:
+    def _app_secret_fields(self):
         page = self.client.page
-        try:
-            secret = page.evaluate(
-                """
-                () => {
-                    for (const input of document.querySelectorAll('input')) {
-                        const value = String(input.value || '').trim();
-                        if (/^[a-fA-F0-9]{32}$/.test(value)) return value;
-                    }
-                    const html = document.documentElement.innerHTML || '';
-                    const match = html.match(/\\b[a-fA-F0-9]{32}\\b/);
-                    return match ? match[0] : '';
-                }
-                """
-            )
-            return str(secret or "").strip()
-        except Exception:
-            return ""
+        return [
+            page.get_by_label(re.compile(r"App\s*Secret|应用密钥|应用秘钥|應用程式密鑰", re.I)),
+            page.locator('input[name="app_secret"], input[name="app_secret_value"], input#app_secret'),
+        ]
+
+    def show_app_secret(self) -> bool:
+        page = self.client.page
+        anchors = self._app_secret_fields() + [
+            page.get_by_text(re.compile(r"^\s*(?:App\s*Secret|应用密钥|应用秘钥|應用程式密鑰)\s*[:：]?\s*$", re.I))
+        ]
+        show_name = re.compile(r"^(?:Show|Reveal|显示|顯示|显示密钥|显示应用密钥)$", re.I)
+        for candidates in anchors:
+            for index in range(min(candidates.count(), 6)):
+                scope = candidates.nth(index)
+                if not scope.is_visible():
+                    continue
+                # Keep the reveal action inside the labelled secret field's section.
+                for _ in range(6):
+                    if scope.evaluate("el => el.tagName") in {"BODY", "HTML"}:
+                        break
+                    for role in ("button", "link"):
+                        buttons = scope.get_by_role(role, name=show_name)
+                        if buttons.count() == 1 and buttons.first.is_visible():
+                            buttons.first.click(timeout=5000)
+                            return True
+                    scope = scope.locator("xpath=..")
+        return False
+
+    def extract_app_secret_from_page(self) -> str:
+        for candidates in self._app_secret_fields():
+            try:
+                for index in range(candidates.count()):
+                    field = candidates.nth(index)
+                    if not field.is_visible():
+                        continue
+                    value = field.input_value(timeout=1000).strip()
+                    if re.fullmatch(r"[a-fA-F0-9]{32}", value):
+                        return value
+            except Exception:
+                continue
+        return ""
 
     def extract_profile_data_id_from_page(self) -> str | None:
         return self.extract_profile_data_id_from_text(self.client.page.content())

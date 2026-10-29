@@ -858,7 +858,7 @@ def run_ad_auth_task(
                 duplicate_ids = list(result.get("duplicate_ids") or [])
                 submitted_ids = list(result.get("submitted_ids") or [])
                 summary.append(
-                    f"{app_or_brand}->App {app_id} 邮箱{selected_profile_label} 新增{len(added_ids)} 重复{len(duplicate_ids)} 总计{len(submitted_ids)}"
+                    f"{app_or_brand}->App {app_id} 新增{len(added_ids)} 重复{len(duplicate_ids)} 总计{len(submitted_ids)}"
                 )
             except Exception as exc:
                 detail = exc.detail if isinstance(exc, AutomationSubprocessError) and exc.detail else traceback.format_exc()
@@ -1299,10 +1299,9 @@ def handle_event(
                 send_lark_text(chat_id, f"广告授权失败：{','.join(app_or_brands)} | 原因：{exc}", logger=log)
                 return
         enqueue_ad_auth_work(app_or_brands, ad_account_ids, roxy_profile_id, command_roxy_profile_email, chat_id, logger)
-        profile_text = command_roxy_profile_label or "按表格邮箱"
         send_lark_text(
             chat_id,
-            f"已受理广告授权：{','.join(app_or_brands)} | 广告账号：{len(ad_account_ids)} 个 | Roxy 邮箱: {profile_text}",
+            f"已受理广告授权：{','.join(app_or_brands)} | 广告账号：{len(ad_account_ids)} 个",
             logger=log,
         )
         return
@@ -1366,7 +1365,7 @@ def handle_event(
         verb = "已受理覆盖配置" if created else "已有覆盖任务"
         send_lark_text(
             chat_id,
-            f"{verb}：{task.brand}\n覆盖：{task.override_brand}\nAdjust：{task.adjust_brand_name or task.brand}\n任务ID: {task.task_id}\nRoxy 邮箱: {effective_roxy_profile_label or '-'}\n发送人: {sender_id or '-'}",
+            f"{verb}：{task.brand}\n覆盖：{task.override_brand}\nAdjust：{task.adjust_brand_name or task.brand}\n发送人: {sender_id or '-'}",
             logger=log,
         )
         return
@@ -1423,7 +1422,7 @@ def handle_event(
     verb = "已受理" if created else "已有任务"
     send_lark_text(
         chat_id,
-        f"{verb}：{task.brand}\nAdjust：{task.adjust_brand_name or task.brand}\n任务ID: {task.task_id}\nRoxy 邮箱: {effective_roxy_profile_label or '-'}\n发送人: {sender_id or '-'}",
+        f"{verb}：{task.brand}\nAdjust：{task.adjust_brand_name or task.brand}\n发送人: {sender_id or '-'}",
         logger=log,
     )
 

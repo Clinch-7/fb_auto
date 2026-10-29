@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -26,10 +26,15 @@ class RoxyProfile:
     name: str
     user_name: str = ""
     sort_num: str = ""
-    remark: str = ""
+    remark: str = field(default="", repr=False)
     open_status: bool = False
     workspace_id: int | None = None
     workspace_name: str = ""
+
+    @property
+    def confirmation_password(self) -> str:
+        lines = self.remark.splitlines()
+        return lines[0].strip() if lines else ""
 
     @property
     def display_name(self) -> str:
@@ -172,7 +177,7 @@ class RoxyClient:
                             name=str(row.get("windowName") or "").strip(),
                             user_name=str(row.get("userName") or "").strip(),
                             sort_num=str(row.get("windowSortNum") or "").strip(),
-                            remark=str(row.get("windowRemark") or "").strip(),
+                            remark=str(row.get("windowRemark") or ""),
                             open_status=bool(row.get("openStatus")),
                             workspace_id=workspace_id,
                             workspace_name=str(row.get("workspaceName") or workspace_name).strip(),

@@ -16,6 +16,9 @@ ADJUST_AUTOMATION_API = "https://automate.adjust.com/app-automation"
 FACEBOOK_PARTNER_ID = 34
 TIKTOK_PARTNER_ID = 2337
 
+# Facebook ON/OFF builds switch only these two data-sharing options together.
+FACEBOOK_PARAMETER_AND_UNINSTALL_ENABLED = False
+
 DEFAULT_FACEBOOK_EVENT_MAPPINGS = {
     "Register": "fb_mobile_complete_registration",
     "Small": "fb_mobile_purchase",
@@ -514,6 +517,8 @@ class AdjustService:
                         value = item.get("value")
                         if value not in (None, ""):
                             cleaned[str(item["key"])] = value
+                cleaned["parameter_forwarding"] = FACEBOOK_PARAMETER_AND_UNINSTALL_ENABLED
+                cleaned["uninstall_forwarding"] = FACEBOOK_PARAMETER_AND_UNINSTALL_ENABLED
             partner_app_settings[platform] = cleaned
 
         partner_event_type_settings = []
@@ -565,11 +570,11 @@ class AdjustService:
             "app_id": str(fb_app_id),
             "integrated": False,
             "revenue_forwarding": bool(android_settings.get("revenue_forwarding", True)),
-            "parameter_forwarding": bool(android_settings.get("parameter_forwarding", False)),
+            "parameter_forwarding": FACEBOOK_PARAMETER_AND_UNINSTALL_ENABLED,
             "session_forwarding": bool(android_settings.get("session_forwarding", False)),
             "cost_forwarding": bool(android_settings.get("cost_forwarding", False)),
             "attributed_only": bool(android_settings.get("attributed_only", False)),
-            "uninstall_forwarding": bool(android_settings.get("uninstall_forwarding", False)),
+            "uninstall_forwarding": FACEBOOK_PARAMETER_AND_UNINSTALL_ENABLED,
             "ad_revenue_forwarding": bool(android_settings.get("ad_revenue_forwarding", False)),
             "ad_revenue_forwarding_sources": android_settings.get("ad_revenue_forwarding_sources") or [],
             "skadnetwork_forwarding": bool(android_settings.get("skadnetwork_forwarding", False)),

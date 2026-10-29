@@ -174,19 +174,24 @@ class MetaPageClient:
         return fetch_result
 
     def _write_log(self, url: str, payload: dict[str, Any], result: FetchResult) -> Path:
+        sensitive = "/app-secret/" in url or any("password" in str(key).lower() for key in payload)
+        logged_payload = {
+            key: "[REDACTED]" if "password" in str(key).lower() else value
+            for key, value in payload.items()
+        }
         path = log_dir() / f"meta_fetch_{int(time.time() * 1000)}.json"
         with path.open("w", encoding="utf-8") as f:
             json.dump(
                 {
                     "url": url,
-                    "payload": payload,
+                    "payload": logged_payload,
                     "result": {
                         "status": result.status,
                         "ok": result.ok,
                         "url": result.url,
                         "redirected": result.redirected,
                         "content_type": result.content_type,
-                        "text_head": result.text[:12000],
+                        "text_head": "[REDACTED: credential response]" if sensitive else result.text[:12000],
                     },
                 },
                 f,

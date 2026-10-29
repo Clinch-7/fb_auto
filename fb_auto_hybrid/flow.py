@@ -465,13 +465,13 @@ class HybridFlow:
             vest.update_fb_app_id(app, fb_app_id)
 
             if sync_monitor:
-                if not fb_app_secret:
-                    self.log("[9] Fetch App Secret")
-                    fb_app_secret = self._fetch_app_secret(page, api, fb_app_id)
-                    if fb_app_secret:
-                        self.log(f"    app_secret={fb_app_secret[:6]}****")
-                    else:
-                        self.log("    app_secret not found; monitor sheet will preserve existing secret if any")
+                self.log("[9] Fetch latest App Secret for override")
+                latest_secret = self._fetch_app_secret(page, api, fb_app_id)
+                if latest_secret:
+                    fb_app_secret = latest_secret
+                    self.log("    latest app_secret retrieved")
+                else:
+                    self.log("    app_secret not found; monitor sheet will preserve existing secret if any")
                 self.log("[10] Sync monitor sheet")
                 sheet.sync_brand(
                     adjust_brand_name or brand_name,
@@ -817,13 +817,15 @@ class HybridFlow:
             page = self._open(page, "https://developers.facebook.com/apps/creation/")
             page = self.session.require_page()
 
-        self.log("    filling App name")
-        self._fill_first(page, ['input[aria-label="App name"]', 'input[name="basic_name"]'], brand_name)
-        self.log("    App name filled")
-        self._fill_optional(page, ['input[name="basic_email"]', 'input[type="email"]'], contact_email)
-        self._dismiss_new_create_apps_modal(page)
+        self._prepare_creation_details(page, brand_name, contact_email)
         self.log("    clicking Next after App details")
-        self._click_button(page, "Next")
+        try:
+            self._click_button(page, "Next")
+        except PlaywrightTimeoutError as exc:
+            raise RuntimeError(
+                "App details Next could not be clicked; check App name and App contact email "
+                "validation on the creation page."
+            ) from exc
 
         self.log("    selecting use case")
         page.get_by_text("Create & manage app ads with Meta Ads Manager").click(timeout=20000)
@@ -853,7 +855,7 @@ class HybridFlow:
         terms_url = f"https://developers.facebook.com/advanced_mobile_measurement/terms?appid={app_id}"
         page = self._open(page, terms_url)
         api = self._api_for(page)
-        auto_clicked = BrowserSession.auto_click_confirmations(page, self.log, max_clicks=2)
+        auto_clicked = self.session.confirm_page(page, self.log, max_clicks=2)
         if auto_clicked and not self._amm_accept_button_visible(page):
             self.log("    accepted via auto confirmation")
             return
@@ -897,24 +899,47 @@ class HybridFlow:
                 secret = MetaApi.extract_app_secret_from_text(result.text)
                 if secret:
                     return secret
+            except UiRequired:
+                self.log("    request app secret requires confirmation")
+                password = self.session.confirmation_password(self.log)
+                if password:
+                    try:
+                        result = api.request_app_secret(app_id, ajax_password=password)
+                        secret = MetaApi.extract_app_secret_from_text(result.text)
+                        if secret:
+                            self.log("    app secret retrieved after Roxy remark password confirmation")
+                            return secret
+                    except Exception as exc:
+                        self.log(f"    app secret password confirmation did not complete ({type(exc).__name__}); checking browser confirmation")
             except Exception as exc:
                 self.log(f"    request app secret needs confirmation or failed: {exc}")
 
-            BrowserSession.auto_click_confirmations(page, self.log, max_clicks=4)
-            deadline = time.time() + 20
+            show_clicked = False
+            confirmation_submitted = False
+            followup_submitted = False
+            deadline = time.time() + 30
             while time.time() < deadline:
                 secret = api.extract_app_secret_from_page()
                 if secret:
+                    self.log("    app secret retrieved from labelled page field")
                     return secret
-                try:
-                    result = api.request_app_secret(app_id)
-                    secret = MetaApi.extract_app_secret_from_text(result.text)
-                    if secret:
-                        return secret
-                except Exception:
-                    pass
-                BrowserSession.auto_click_confirmations(page, self.log, max_clicks=2)
+                if not show_clicked:
+                    show_clicked = api.show_app_secret()
+                    if show_clicked:
+                        self.log("    clicked App Secret Show; waiting for confirmation or revealed value")
+                if BrowserSession.has_hard_verification(page):
+                    self.log("    app secret requires manual security verification in the browser")
+                    break
+                passwords = page.locator('input[type="password"]:visible:not([readonly]):not([disabled])')
+                if not confirmation_submitted and passwords.count() == 1:
+                    confirmation_submitted = bool(self.session.confirm_page(page, self.log, max_clicks=1))
+                elif confirmation_submitted and not followup_submitted and passwords.count() == 0:
+                    followup_submitted = self.session.confirm_password_followup(page, self.log)
                 time.sleep(1)
+            if not show_clicked and not confirmation_submitted:
+                self.log("    app secret not retrieved: no usable Show control or password confirmation was found")
+            else:
+                self.log("    app secret not retrieved after browser confirmation; check the visible Meta prompt")
         except Exception as exc:
             self.log(f"    fetch app secret failed: {exc}")
         return ""
@@ -929,7 +954,7 @@ class HybridFlow:
 
     def _wait_for_created_app_after_possible_verification(self, page: Page, brand_name: str) -> str:
         for attempt in range(1, 6):
-            BrowserSession.auto_click_confirmations(page, self.log, max_clicks=4)
+            self.session.confirm_page(page, self.log, max_clicks=4)
             timeout = 45 if attempt == 1 else 120
             app_id = self._wait_for_app_id_from_url(page, timeout_seconds=timeout, logger=self.log)
             if app_id:
@@ -945,7 +970,7 @@ class HybridFlow:
             if attempt >= 5:
                 break
 
-            clicked = BrowserSession.auto_click_confirmations(page, self.log, max_clicks=4)
+            clicked = self.session.confirm_page(page, self.log, max_clicks=4)
             if clicked:
                 continue
 
@@ -960,6 +985,41 @@ class HybridFlow:
             self.session.save_cookies()
 
         raise UiRequired("App was not created or app_id was not detected after repeated manual confirmations.")
+
+    def _prepare_creation_details(self, page: Page, brand_name: str, contact_email: str) -> None:
+        self._dismiss_new_create_apps_modal(page)
+
+        def fill_details():
+            self.log("    filling App name")
+            self._fill_first(page, ['input[aria-label="App name"]', 'input[name="basic_name"]'], brand_name)
+            self.log("    App name filled")
+            email_candidates = [
+                page.get_by_label(re.compile(r"App contact email|Contact email|联系邮箱|联系电子邮箱", re.I)),
+                page.locator('input[name="basic_email"], input[type="email"]'),
+            ]
+            for candidates in email_candidates:
+                for index in range(candidates.count()):
+                    field = candidates.nth(index)
+                    if not field.is_visible():
+                        continue
+                    expected_email = str(contact_email or "").strip()
+                    if expected_email:
+                        field.fill(expected_email, timeout=5000)
+                    if not field.input_value(timeout=1000).strip():
+                        raise RuntimeError("App contact email is empty; cannot continue app creation.")
+                    field.press("Tab", timeout=3000)
+                    return field, expected_email
+            raise RuntimeError("App contact email field was not found; cannot continue app creation.")
+
+        email_field, expected_email = fill_details()
+        # A late first-time modal can replace the already-filled form.
+        if self._dismiss_new_create_apps_modal(page):
+            self.log("    first-time modal closed; refilling App details")
+            email_field, expected_email = fill_details()
+        actual_email = email_field.input_value(timeout=1000).strip()
+        if not actual_email or (expected_email and actual_email != expected_email):
+            raise RuntimeError("App contact email was not retained after filling; cannot continue app creation.")
+        self.log("    App contact email filled from selected account" if expected_email else "    App contact email verified")
 
     def _dismiss_new_create_apps_modal(self, page: Page) -> bool:
         try:
@@ -986,11 +1046,11 @@ class HybridFlow:
 
     def _with_login_retry(self, page: Page, url: str, label: str, func):
         try:
-            BrowserSession.auto_click_confirmations(page, self.log, max_clicks=3)
+            self.session.confirm_page(page, self.log, max_clicks=3)
             return func()
         except UiRequired as exc:
             self.log(f"    {label} needs login/checkpoint retry: {exc}")
-            clicked = BrowserSession.auto_click_confirmations(page, self.log, max_clicks=4)
+            clicked = self.session.confirm_page(page, self.log, max_clicks=4)
             if clicked:
                 self.session.save_cookies()
                 page = self._open(page, url)
@@ -1153,15 +1213,15 @@ class HybridFlow:
         locator.click(timeout=20000)
         time.sleep(0.8)
 
-    @staticmethod
     def _wait_for_app_id_from_url(
+        self,
         page: Page,
         timeout_seconds: int,
         logger: Callable[[str], None] | None = None,
     ) -> str | None:
         deadline = time.time() + timeout_seconds
         while time.time() < deadline:
-            BrowserSession.auto_click_confirmations(page, logger, max_clicks=1)
+            self.session.confirm_page(page, logger, max_clicks=1)
             match = re.search(r"/apps/(\d{10,})/", page.url)
             if match and "creation" not in page.url:
                 return match.group(1)
@@ -1172,4 +1232,3 @@ class HybridFlow:
             except Exception:
                 pass
         return None
-
